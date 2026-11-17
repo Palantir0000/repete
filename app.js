@@ -1221,8 +1221,8 @@
     var body = h('main', { class: 'lib' });
     this.status = h('div', { class: 'banner', id: 'lib-status', hidden: !this.message, text: this.message });
     body.appendChild(this.status);
-    var demo = root.REPETE_DEMO;
-    if (demo && !packs.some(function (p) { return p.pack_id === demo.pack_id; })) body.appendChild(this.demoCard(demo));
+    var def = root.REPETE_DEFAULT;
+    if (def && !packs.some(function (p) { return p.pack_id === def.pack_id; })) body.appendChild(this.defaultCard(def));
     body.appendChild(h('div', { class: 'import-row' }, [
       h('button', { class: 'primary big', id: 'btn-import', text: 'Importer un pack', onclick: function () { input.click(); } }),
       h('p', { class: 'hint', text: 'Un pack est un fichier « .theatrepack » reçu par AirDrop, WhatsApp, mail ou lien. Tu l’importes une fois : ensuite tout fonctionne sans connexion.' })
@@ -1242,31 +1242,33 @@
     this.root.appendChild(head); this.root.appendChild(body); this.root.appendChild(input);
   };
 
-  /* Scène d'essai embarquée dans l'application : un appui suffit, aucun fichier à importer. */
-  Library.prototype.demoCard = function (demo) {
+  /* Pièce embarquée par défaut dans l'application : un appui l'ajoute à la bibliothèque, sans fichier à importer. */
+  Library.prototype.defaultCard = function (def) {
     var self = this;
-    return h('section', { class: 'demo-card', 'aria-label': 'Essai' }, [
-      h('div', { class: 'hint caps', text: 'Essai' }),
-      h('h2', { text: demo.title }),
-      h('p', { text: demo.scene_title + ' · voix de synthèse. Embarquée dans l’application : elle marche hors ligne, sans rien importer.' }),
-      h('button', { class: 'primary big', id: 'btn-demo', text: 'Essayer maintenant', onclick: function () { self.openDemo(demo); } })
+    return h('section', { class: 'demo-card', 'aria-label': 'Pièce par défaut' }, [
+      h('div', { class: 'hint caps', text: 'Pièce par défaut' }),
+      h('h2', { text: def.title }),
+      h('p', { text: def.scenes + ' scène' + (def.scenes > 1 ? 's' : '') + ' · ' + fmtDur(def.duration) + ' · voix de synthèse · ' + fmtSize(def.size) +
+        '. Embarquée dans l’application : une fois ajoutée, elle marche hors ligne.' }),
+      h('button', { class: 'primary big', id: 'btn-default', text: 'Ajouter à ma bibliothèque', onclick: function () { self.addDefault(def); } })
     ]);
   };
 
-  Library.prototype.openDemo = async function (demo) {
-    var btn = $('#btn-demo');
+  Library.prototype.addDefault = async function (def) {
+    var self = this, btn = $('#btn-default');
     if (btn) btn.disabled = true;
-    this.setStatus('Chargement de l’essai…');
+    this.setStatus('Téléchargement de la pièce…');
     try {
-      var res = await root.fetch(demo.url);
+      var res = await root.fetch(def.url);
       if (!res.ok) throw new Error('réponse ' + res.status);
       var blob = await res.blob();
-      var r = await importPack(this.lib, blob, { progress: function () {} });
+      var r = await importPack(this.lib, blob, { progress: function (m) { self.setStatus('Ajout de la pièce — ' + m); } });
       try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* ignoré */ }
-      await this.open(r.packId, demo.scene);
+      this.message = '« ' + r.title + ' » ajoutée : ' + r.added + ' scène(s). Choisis une scène et touche « Répéter ».';
+      await this.show();
     } catch (e) {
       if (btn) btn.disabled = false;
-      this.setStatus('L’essai n’a pas pu être chargé. Ouvre l’application une fois avec une connexion, puis réessaie. (' + (e && e.message ? e.message : e) + ')');
+      this.setStatus('La pièce n’a pas pu être chargée. Ouvre l’application une fois avec une connexion, puis réessaie. (' + (e && e.message ? e.message : e) + ')');
     }
   };
 
