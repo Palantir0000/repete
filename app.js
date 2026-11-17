@@ -1195,7 +1195,7 @@
     await lib.putPack({ pack_id: manifest.pack_id, title: manifest.play.title, provider: manifest.play.provider,
       roles: Object.keys(roles).map(function (k) { return roles[k]; }),
       scenes: Object.keys(scenesRec).map(function (k) { return scenesRec[k]; }).sort(order), updated: Date.now() });
-    return { added: added, updated: updated, same: same, title: manifest.play.title };
+    return { added: added, updated: updated, same: same, title: manifest.play.title, packId: manifest.pack_id };
   }
 
   function Library(rootEl, lib) { this.root = rootEl; this.lib = lib; this.urls = []; this.message = ''; }
@@ -1221,6 +1221,8 @@
     var body = h('main', { class: 'lib' });
     this.status = h('div', { class: 'banner', id: 'lib-status', hidden: !this.message, text: this.message });
     body.appendChild(this.status);
+    var demo = root.REPETE_DEMO;
+    if (demo && !packs.some(function (p) { return p.pack_id === demo.pack_id; })) body.appendChild(this.demoCard(demo));
     body.appendChild(h('div', { class: 'import-row' }, [
       h('button', { class: 'primary big', id: 'btn-import', text: 'Importer un pack', onclick: function () { input.click(); } }),
       h('p', { class: 'hint', text: 'Un pack est un fichier « .theatrepack » reçu par AirDrop, WhatsApp, mail ou lien. Tu l’importes une fois : ensuite tout fonctionne sans connexion.' })
@@ -1238,6 +1240,34 @@
     else if (persisted) foot.appendChild(h('p', { class: 'hint', text: 'Stockage protégé : les données ne seront pas effacées automatiquement.' }));
     body.appendChild(foot);
     this.root.appendChild(head); this.root.appendChild(body); this.root.appendChild(input);
+  };
+
+  /* Scène d'essai embarquée dans l'application : un appui suffit, aucun fichier à importer. */
+  Library.prototype.demoCard = function (demo) {
+    var self = this;
+    return h('section', { class: 'demo-card', 'aria-label': 'Essai' }, [
+      h('div', { class: 'hint caps', text: 'Essai' }),
+      h('h2', { text: demo.title }),
+      h('p', { text: demo.scene_title + ' · voix de synthèse. Embarquée dans l’application : elle marche hors ligne, sans rien importer.' }),
+      h('button', { class: 'primary big', id: 'btn-demo', text: 'Essayer maintenant', onclick: function () { self.openDemo(demo); } })
+    ]);
+  };
+
+  Library.prototype.openDemo = async function (demo) {
+    var btn = $('#btn-demo');
+    if (btn) btn.disabled = true;
+    this.setStatus('Chargement de l’essai…');
+    try {
+      var res = await root.fetch(demo.url);
+      if (!res.ok) throw new Error('réponse ' + res.status);
+      var blob = await res.blob();
+      var r = await importPack(this.lib, blob, { progress: function () {} });
+      try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* ignoré */ }
+      await this.open(r.packId, demo.scene);
+    } catch (e) {
+      if (btn) btn.disabled = false;
+      this.setStatus('L’essai n’a pas pu être chargé. Ouvre l’application une fois avec une connexion, puis réessaie. (' + (e && e.message ? e.message : e) + ')');
+    }
   };
 
   Library.prototype.card = function (p) {
