@@ -122,3 +122,8 @@ select { font: inherit; color: inherit; background: var(--card); border: 1px sol
 .fav-box h2 { margin: 0; font-size: 17px; }
 .fav-box .scene-list li:first-child { border-top: 0; padding-top: 0; }
 .fav-box .play-name { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); }
+
+/* ---- Picto d'import (haut gauche de la bibliothèque) ---- */
+.icon-btn { width: 44px; height: 44px; padding: 0; display: inline-grid; place-items: center; border-radius: 12px; flex: none; color: var(--accent); }
+.icon-btn svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.icon-btn:disabled { opacity: .5; }

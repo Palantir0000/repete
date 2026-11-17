@@ -1220,7 +1220,10 @@
     setNet();
     if (!this._netBound) { this._netBound = true; root.addEventListener("online", function () { var n = $("#net"); if (n) { n.textContent = "en ligne"; n.classList.remove("off"); } }); root.addEventListener("offline", function () { var n = $("#net"); if (n) { n.textContent = "hors ligne"; n.classList.add("off"); } }); }
 
-    var head = h('header', { class: 'bar lib-bar' }, [h('div', { class: 'titles' }, [h('div', { class: 'play', text: 'Répète' }), h('div', { class: 'big-title', text: 'Bibliothèque' })]), online]);
+    // picto « importer » en haut à gauche (remplace l'ancien gros bouton)
+    var importBtn = h('button', { class: 'icon-btn', id: 'btn-import', 'aria-label': 'Importer un pack', title: 'Importer un pack', onclick: function () { input.click(); } });
+    importBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10.5l5 5 5-5M4 16v3.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V16"/></svg>';
+    var head = h('header', { class: 'bar lib-bar' }, [importBtn, h('div', { class: 'titles' }, [h('div', { class: 'play', text: 'Répète' }), h('div', { class: 'big-title', text: 'Bibliothèque' })]), online]);
     var body = h('main', { class: 'lib' });
     this.favBox = h('section', { class: 'fav-box', id: 'fav-box', 'aria-label': 'Favoris' });
     if (packs.length) body.appendChild(this.favBox);
@@ -1228,18 +1231,15 @@
     body.appendChild(this.status);
     var def = root.REPETE_DEFAULT;
     if (def && !packs.some(function (p) { return p.pack_id === def.pack_id; })) body.appendChild(this.defaultCard(def));
-    body.appendChild(h('div', { class: 'import-row' }, [
-      h('button', { class: 'primary big', id: 'btn-import', text: 'Importer un pack', onclick: function () { input.click(); } }),
-      h('p', { class: 'hint', text: 'Un pack est un fichier « .theatrepack » reçu par AirDrop, WhatsApp, mail ou lien. Tu l’importes une fois : ensuite tout fonctionne sans connexion.' })
-    ]));
     if (!packs.length) {
       body.appendChild(h('div', { class: 'empty' }, [
         h('h2', { text: 'Aucune pièce pour l’instant' }),
-        h('p', { text: 'Importe le pack de ta pièce pour commencer. Les packs ne sont jamais envoyés sur Internet par cette application.' })]));
+        h('p', { text: 'Touche l’icône d’import en haut à gauche pour ajouter le pack de ta pièce (fichier « .theatrepack » reçu par AirDrop, WhatsApp, mail ou lien). Tu l’importes une fois : ensuite tout fonctionne sans connexion. Les packs ne sont jamais envoyés sur Internet par cette application.' })]));
     }
     packs.forEach(function (p) { body.appendChild(self.card(p)); });
     var foot = h('footer', { class: 'lib-foot' });
     var total = packs.reduce(function (a, p) { return a + p.scenes.reduce(function (b, s) { return b + (s.size || 0); }, 0); }, 0);
+    foot.appendChild(h('p', { class: 'hint', text: 'Pour ajouter un autre pack (« .theatrepack »), touche l’icône d’import en haut à gauche.' }));
     foot.appendChild(h('p', { class: 'hint', text: 'Espace utilisé par les pièces : ' + fmtSize(total) + (est && est.quota ? ' sur ' + fmtSize(est.quota) + ' disponibles' : '') + '.' }));
     if (persisted === false) foot.appendChild(h('p', { class: 'hint', text: 'Le navigateur peut effacer ces données s’il manque de place. Sur iPhone : Partager → « Sur l’écran d’accueil » pour les protéger. Le fichier pack reste ta copie de référence.' }));
     else if (persisted) foot.appendChild(h('p', { class: 'hint', text: 'Stockage protégé : les données ne seront pas effacées automatiquement.' }));

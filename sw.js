@@ -1,7 +1,7 @@
 /* Répète — service worker : la coque de l'application est mise en cache à la première visite, puis servie
    sans réseau. Les packs importés par l'utilisateur vivent dans IndexedDB, pas ici. La pièce par défaut
    éventuelle est préchargée dans un cache séparé (versionné par son contenu), sans bloquer l'installation. */
-var VERSION = 'bb651e81be';
+var VERSION = '75fe261fc0';
 var CACHE = 'repete-shell-' + VERSION;
 var SHELL = ["./", "./index.html", "./app.js", "./style.css", "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon.png"];
 var CONTENT_CACHE = 'repete-content-98535b1fc8';
