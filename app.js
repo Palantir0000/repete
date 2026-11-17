@@ -518,19 +518,10 @@
     this.text = h('main', { id: 'text', tabindex: '-1' });
     this.banner = h('div', { class: 'banner', hidden: true });
     this.controls = this.buildControls();
-    this.start = h('div', { class: 'start' }, [
-      h('div', { class: 'card' }, [
-        h('h1', { text: this.data.manifest.play.title }),
-        this.startScene = h('p', { class: 'sub' }),
-        h('p', { text: 'Choisis tes rôles dans les réglages, puis démarre. Le son reste sur ton appareil, rien n’est envoyé.' }),
-        h('button', { class: 'primary big', id: 'start-btn', text: 'Démarrer', onclick: function () { self.begin(); } }),
-        h('button', { class: 'link', text: 'Réglages et rôles', onclick: function () { self.openSettings(); } })
-      ])]);
     rootEl.appendChild(this.header);
     rootEl.appendChild(this.banner);
     rootEl.appendChild(this.text);
     rootEl.appendChild(this.controls);
-    rootEl.appendChild(this.start);
 
     this.data.manifest.scenes.forEach(function (s) {
       self.sceneSelect.appendChild(h('option', { value: s.id, text: s.title }));
@@ -600,7 +591,6 @@
     var scene = this.data.scenes[id];
     this.sceneId = id;
     this.sceneSelect.value = id;
-    this.startScene.textContent = scene.scene.title;
     this.revealed = {};
     this.abState = 0; this.abA = null;
     this.engine.load(scene.lines, this.settings);
@@ -718,14 +708,9 @@
   };
 
   // ------------------------------------------------------------------ commandes
-  App.prototype.begin = function () {
-    this.engine.unlock();
-    this.start.hidden = true;
-    this.engine.play();
-  };
-
   App.prototype.toggle = function () {
-    if (!this.engine.unlocked) { this.engine.unlock(); this.start.hidden = true; }
+    // premier appui sur Lecture = geste utilisateur : il déverrouille l'audio (exigé par iOS et Android)
+    if (!this.engine.unlocked) this.engine.unlock();
     if (!this.engine.playing && this.engine.i >= this.lines().length - 1 && this.waiting === false
         && this.banner.textContent === 'Fin de la scène.') this.engine.seek(0);
     this.engine.toggle();
@@ -1111,6 +1096,22 @@
     });
   }
 
+  /* Favoris : liste d'identifiants de scènes, conservée dans l'enregistrement de la pièce. */
+  Library.prototype.setFavorite = function (packId, sid, on) {
+    var db = this.db;
+    return tx(db, ['packs'], 'readwrite', function (t) {
+      var ps = t.objectStore('packs'), g = ps.get(packId);
+      g.onsuccess = function () {
+        var p = g.result;
+        if (!p) return;
+        var f = (p.favorites || []).filter(function (x) { return x !== sid; });
+        if (on) f.push(sid);
+        p.favorites = f;
+        ps.put(p);
+      };
+    });
+  };
+
   Library.prototype.deleteScene = function (packId, sid) {
     var db = this.db;
     return tx(db, ['scenes', 'audio', 'packs'], 'readwrite', function (t) {
@@ -1119,7 +1120,7 @@
       var ps = t.objectStore('packs'), g = ps.get(packId);
       g.onsuccess = function () {
         var p = g.result;
-        if (p) { p.scenes = p.scenes.filter(function (s) { return s.id !== sid; }); ps.put(p); }
+        if (p) { p.scenes = p.scenes.filter(function (s) { return s.id !== sid; }); p.favorites = (p.favorites || []).filter(function (x) { return x !== sid; }); ps.put(p); }
       };
     });
   };
@@ -1193,6 +1194,7 @@
     manifest.roles.forEach(function (r) { roles[r.id] = r; });
     var order = function (a, b) { return String(a.id).localeCompare(String(b.id), undefined, { numeric: true }); };
     await lib.putPack({ pack_id: manifest.pack_id, title: manifest.play.title, provider: manifest.play.provider,
+      favorites: ((existing && existing.favorites) || []).filter(function (id) { return !!scenesRec[id]; }),
       roles: Object.keys(roles).map(function (k) { return roles[k]; }),
       scenes: Object.keys(scenesRec).map(function (k) { return scenesRec[k]; }).sort(order), updated: Date.now() });
     return { added: added, updated: updated, same: same, title: manifest.play.title, packId: manifest.pack_id };
@@ -1205,6 +1207,7 @@
     this.revoke();
     this.root.innerHTML = '';
     var packs = await this.lib.listPacks();
+    this.packs = packs;
     var est = null;
     try { if (navigator.storage && navigator.storage.estimate) est = await navigator.storage.estimate(); } catch (e) { /* ignoré */ }
     var persisted = null;
@@ -1219,6 +1222,8 @@
 
     var head = h('header', { class: 'bar lib-bar' }, [h('div', { class: 'titles' }, [h('div', { class: 'play', text: 'Répète' }), h('div', { class: 'big-title', text: 'Bibliothèque' })]), online]);
     var body = h('main', { class: 'lib' });
+    this.favBox = h('section', { class: 'fav-box', id: 'fav-box', 'aria-label': 'Favoris' });
+    if (packs.length) body.appendChild(this.favBox);
     this.status = h('div', { class: 'banner', id: 'lib-status', hidden: !this.message, text: this.message });
     body.appendChild(this.status);
     var def = root.REPETE_DEFAULT;
@@ -1240,6 +1245,65 @@
     else if (persisted) foot.appendChild(h('p', { class: 'hint', text: 'Stockage protégé : les données ne seront pas effacées automatiquement.' }));
     body.appendChild(foot);
     this.root.appendChild(head); this.root.appendChild(body); this.root.appendChild(input);
+    this.fillFavorites();
+  };
+
+  var HEART = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>';
+
+  /* Cœur à cocher : ajoute / retire la scène des favoris (copiée dans l'encadré en haut). */
+  Library.prototype.heart = function (p, s) {
+    var self = this;
+    var on = (p.favorites || []).indexOf(s.id) !== -1;
+    var b = h('button', { class: 'heart', 'aria-pressed': on ? 'true' : 'false', 'aria-label': 'Favori : ' + s.title,
+      'data-pack': p.pack_id, 'data-scene': s.id, onclick: function () { self.toggleFavorite(p.pack_id, s.id); } });
+    b.innerHTML = HEART;
+    return b;
+  };
+
+  Library.prototype.toggleFavorite = async function (packId, sid) {
+    var p = this.packs.filter(function (x) { return x.pack_id === packId; })[0];
+    if (!p) return;
+    var on = (p.favorites || []).indexOf(sid) === -1;
+    await this.lib.setFavorite(packId, sid, on);
+    p.favorites = (p.favorites || []).filter(function (x) { return x !== sid; });
+    if (on) p.favorites.push(sid);
+    // mise à jour sur place (pas de rechargement : la liste garde sa position de défilement)
+    var hearts = this.root.querySelectorAll('.heart');
+    Array.prototype.forEach.call(hearts, function (b) {
+      if (b.getAttribute('data-pack') === packId && b.getAttribute('data-scene') === sid) b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    this.fillFavorites();
+  };
+
+  /* Encadré « Favoris » : copie des scènes favorites de toutes les pièces ; la liste complète reste intacte. */
+  Library.prototype.fillFavorites = function () {
+    var box = this.favBox, self = this;
+    if (!box) return;
+    box.innerHTML = '';
+    box.appendChild(h('h2', { text: 'Favoris' }));
+    var rows = [];
+    (this.packs || []).forEach(function (p) {
+      p.scenes.forEach(function (s) { if ((p.favorites || []).indexOf(s.id) !== -1) rows.push({ p: p, s: s }); });
+    });
+    if (!rows.length) {
+      box.appendChild(h('p', { class: 'hint', text: 'Touche le cœur d’une scène pour la retrouver ici.' }));
+      return;
+    }
+    var list = h('ul', { class: 'scene-list', id: 'fav-list' });
+    rows.forEach(function (r) { list.appendChild(self.sceneRow(r.p, r.s, true)); });
+    box.appendChild(list);
+  };
+
+  Library.prototype.sceneRow = function (p, s, withPlay) {
+    var self = this;
+    return h('li', {}, [
+      h('div', { class: 'scene-info' }, [withPlay ? h('span', { class: 'play-name', text: p.title }) : null, h('b', { text: s.title }),
+        h('span', { class: 'hint', text: ' ' + fmtDur(s.duration) + ' · ' + fmtSize(s.size) })]),
+      h('div', { class: 'scene-actions' }, [
+        h('button', { class: 'primary', text: 'Répéter', onclick: function () { self.open(p.pack_id, s.id); } }),
+        s.has_full ? h('button', { text: 'Écouter', 'aria-label': 'Écouter la scène complète ' + s.title, onclick: function () { self.listen(p, s); } }) : null,
+        this.heart(p, s)
+      ])]);
   };
 
   /* Pièce embarquée par défaut dans l'application : un appui l'ajoute à la bibliothèque, sans fichier à importer. */
@@ -1277,25 +1341,10 @@
     var size = p.scenes.reduce(function (a, s) { return a + (s.size || 0); }, 0);
     var card = h('section', { class: 'pack-card', 'aria-label': p.title });
     card.appendChild(h('div', { class: 'pack-head' }, [
-      h('div', {}, [h('h2', { text: p.title }), h('div', { class: 'hint', text: p.scenes.length + ' scène' + (p.scenes.length > 1 ? 's' : '') + ' · ' + fmtSize(size) + ' · voix ' + p.provider })]),
-      h('button', { class: 'danger', 'aria-label': 'Supprimer la pièce ' + p.title, text: 'Supprimer', onclick: function () {
-        if (root.confirm('Supprimer « ' + p.title + ' » de cet appareil ? Tu pourras la réimporter depuis le fichier pack.')) {
-          self.lib.deletePack(p.pack_id).then(function () { self.message = 'Pièce supprimée.'; self.show(); });
-        } } })
+      h('div', {}, [h('h2', { text: p.title }), h('div', { class: 'hint', text: p.scenes.length + ' scène' + (p.scenes.length > 1 ? 's' : '') + ' · ' + fmtSize(size) + ' · voix ' + p.provider })])
     ]));
     var list = h('ul', { class: 'scene-list' });
-    p.scenes.forEach(function (s) {
-      var li = h('li', {}, [
-        h('div', { class: 'scene-info' }, [h('b', { text: s.title }), h('span', { class: 'hint', text: ' ' + fmtDur(s.duration) + ' · ' + fmtSize(s.size) })]),
-        h('div', { class: 'scene-actions' }, [
-          h('button', { class: 'primary', text: 'Répéter', onclick: function () { self.open(p.pack_id, s.id); } }),
-          s.has_full ? h('button', { text: 'Écouter', 'aria-label': 'Écouter la scène complète ' + s.title, onclick: function () { self.listen(p, s); } }) : null,
-          h('button', { class: 'ghost', 'aria-label': 'Supprimer la scène ' + s.title, text: '✕', onclick: function () {
-            if (root.confirm('Supprimer la scène « ' + s.title + ' » ?')) self.lib.deleteScene(p.pack_id, s.id).then(function () { self.show(); });
-          } })
-        ])]);
-      list.appendChild(li);
-    });
+    p.scenes.forEach(function (s) { list.appendChild(self.sceneRow(p, s, false)); });
     card.appendChild(list);
     return card;
   };

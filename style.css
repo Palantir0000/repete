@@ -65,10 +65,6 @@ select { font: inherit; color: inherit; background: var(--card); border: 1px sol
 .chip.on, .chip[aria-pressed=true] { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
 .chip.role.on { background: var(--c); color: #fff; }
 
-.start { position: absolute; inset: 0; z-index: 5; background: var(--bg); display: grid; place-items: center; padding: 24px; }
-.card { max-width: 420px; text-align: center; padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
-.card h1 { font-size: 26px; margin: 0 0 4px; }
-.card .sub { margin: 0 0 14px; color: var(--dim); font-weight: 650; }
 .big { min-height: 60px; font-size: 20px; width: 100%; margin: 10px 0; }
 
 .sheet { position: absolute; inset: 0; z-index: 10; background: rgba(0,0,0,.45); display: flex; justify-content: center; align-items: flex-end; }
@@ -116,3 +112,13 @@ select { font: inherit; color: inherit; background: var(--card); border: 1px sol
 .demo-card h2 { margin: 0; font-size: 20px; line-height: 1.2; }
 .demo-card p { margin: 0; }
 .caps { text-transform: uppercase; letter-spacing: .06em; font-weight: 700; color: var(--accent); }
+
+/* ---- Favoris ---- */
+.heart { border-color: transparent; padding: 0; width: 44px; height: 44px; color: var(--dim); display: inline-grid; place-items: center; }
+.heart svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+.heart[aria-pressed=true] { color: #d6455d; }
+.heart[aria-pressed=true] svg { fill: currentColor; }
+.fav-box { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; display: grid; gap: 8px; }
+.fav-box h2 { margin: 0; font-size: 17px; }
+.fav-box .scene-list li:first-child { border-top: 0; padding-top: 0; }
+.fav-box .play-name { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); }
