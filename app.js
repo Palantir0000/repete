@@ -1204,6 +1204,7 @@
 
   Library.prototype.show = async function () {
     var self = this;
+    if (root.__repeteUpdatePending) { root.__repeteUpdatePending = false; root.location.reload(); return; }
     this.revoke();
     this.root.innerHTML = '';
     var packs = await this.lib.listPacks();
@@ -1243,6 +1244,9 @@
     foot.appendChild(h('p', { class: 'hint', text: 'Espace utilisé par les pièces : ' + fmtSize(total) + (est && est.quota ? ' sur ' + fmtSize(est.quota) + ' disponibles' : '') + '.' }));
     if (persisted === false) foot.appendChild(h('p', { class: 'hint', text: 'Le navigateur peut effacer ces données s’il manque de place. Sur iPhone : Partager → « Sur l’écran d’accueil » pour les protéger. Le fichier pack reste ta copie de référence.' }));
     else if (persisted) foot.appendChild(h('p', { class: 'hint', text: 'Stockage protégé : les données ne seront pas effacées automatiquement.' }));
+    // version affichée + recherche manuelle de mise à jour
+    var upd = h('button', { class: 'link', id: 'btn-update', text: 'Vérifier les mises à jour', onclick: function () { self.checkUpdate(); } });
+    foot.appendChild(h('p', { class: 'hint', id: 'ver' }, ['Version ' + (root.REPETE_BUILD || 'locale') + ' · ', upd]));
     body.appendChild(foot);
     this.root.appendChild(head); this.root.appendChild(body); this.root.appendChild(input);
     this.fillFavorites();
@@ -1367,6 +1371,15 @@
     await this.show();
   };
 
+  Library.prototype.checkUpdate = async function () {
+    var u = root.Repete && root.Repete.update;
+    this.setStatus('Recherche d’une mise à jour…');
+    var r = u ? await u.check() : 'unsupported';
+    if (r === 'new') this.setStatus('Nouvelle version trouvée : rechargement…');
+    else if (r === 'same') this.setStatus('Tu as déjà la dernière version (' + (root.REPETE_BUILD || 'locale') + ').');
+    else this.setStatus('Cette fenêtre ne gère pas les mises à jour automatiques. Ferme et rouvre l’application avec une connexion.');
+  };
+
   Library.prototype.setStatus = function (m) { if (this.status) { this.status.hidden = false; this.status.textContent = m; } };
 
   Library.prototype.revoke = function () { this.urls.forEach(function (u) { URL.revokeObjectURL(u); }); this.urls = []; };
@@ -1424,22 +1437,42 @@
   R.library = { start: start, importPack: importPack, Library: Library };
 })(typeof window !== 'undefined' ? window : globalThis);
 
-/* Répète — amorçage de la cible PWA : service worker (coque hors ligne), stockage persistant, bibliothèque. */
+/* Répète — amorçage de la cible PWA : service worker (coque hors ligne), stockage persistant, bibliothèque,
+   recherche des mises à jour. */
 (function () {
   'use strict';
   var R = window.Repete, rootEl = document.getElementById('app');
+  var registration = null;
+
+  function onLibraryScreen() { return !!document.querySelector('main.lib'); }
+
+  /* Cherche une nouvelle version. Résout 'new' (nouveau service worker installé), 'same' ou 'unsupported'. */
+  function checkUpdate() {
+    if (!('serviceWorker' in navigator) || !registration) return Promise.resolve('unsupported');
+    return registration.update().then(function () {
+      return (registration.installing || registration.waiting) ? 'new' : 'same';
+    }).catch(function () { return 'same'; });
+  }
+  R.update = { check: checkUpdate };
 
   if ('serviceWorker' in navigator) {
+    var hadController = !!navigator.serviceWorker.controller;
+    // Un nouveau service worker prend la main (skipWaiting) : sur la bibliothèque on recharge tout de suite pour
+    // afficher la nouvelle version ; pendant une répétition on n'interrompt rien, on prévient seulement.
+    var reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (!hadController || reloaded) { hadController = true; return; }
+      if (onLibraryScreen()) { reloaded = true; location.reload(); return; }
+      var b = document.querySelector('#text') && document.querySelector('.banner');
+      if (b) { b.hidden = false; b.textContent = 'Nouvelle version prête : elle s’affichera à ton retour à la bibliothèque.'; }
+      window.__repeteUpdatePending = true;
+    });
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('./sw.js').then(function (reg) {
-        reg.addEventListener('updatefound', function () {
-          var nw = reg.installing;
-          if (nw) nw.addEventListener('statechange', function () {
-            if (nw.state === 'installed' && navigator.serviceWorker.controller) {
-              var b = document.getElementById('lib-status');
-              if (b) { b.hidden = false; b.textContent = 'Une nouvelle version de Répète est prête : elle s’appliquera à la prochaine ouverture.'; }
-            }
-          });
+      navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(function (reg) {
+        registration = reg;
+        reg.update().catch(function () {});
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'visible') reg.update().catch(function () {});
         });
       }).catch(function () { /* l'application reste utilisable sans service worker, mais pas hors ligne */ });
     });
